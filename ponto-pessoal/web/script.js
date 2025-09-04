@@ -129,6 +129,7 @@ async function baterPonto({time, file=null, tipo=null}){
   estado.hoje.push({id:novo.id, time, comprovante:url});
   renderHoje(estado.hoje);
   atualizarResumoDia();
+  if(qs('#relatorio-view').classList.contains('active')) await renderRelatorio();
 }
 
 // Carrega batidas do dia atual
@@ -159,6 +160,7 @@ function renderHoje(lista){
     const btnRemove = frag.querySelector('[data-action="remove-proof"]');
     if(b.comprovante){
       btnView.dataset.url = b.comprovante;
+      btnAttach.classList.add('hidden');
     }else{
       btnView.classList.add('hidden');
       btnRemove.classList.add('hidden');
@@ -180,6 +182,7 @@ async function editarBatida(id, time){
   if(alvo) alvo.time=time;
   renderHoje(estado.hoje);
   atualizarResumoDia();
+  if(qs('#relatorio-view').classList.contains('active')) await renderRelatorio();
 }
 
 // Exclui batida
@@ -188,6 +191,7 @@ async function excluirBatida(id){
   estado.hoje=estado.hoje.filter(e=>e.id!=id);
   renderHoje(estado.hoje);
   atualizarResumoDia();
+  if(qs('#relatorio-view').classList.contains('active')) await renderRelatorio();
 }
 
 // Anexa comprovante a batida
@@ -197,6 +201,7 @@ async function anexarComprovante(id, file){
   const alvo=estado.hoje.find(e=>e.id==id);
   if(alvo) alvo.comprovante=url;
   renderHoje(estado.hoje);
+  if(qs('#relatorio-view').classList.contains('active')) await renderRelatorio();
 }
 
 // Remove comprovante
@@ -205,6 +210,7 @@ async function removerComprovante(id){
   const alvo=estado.hoje.find(e=>e.id==id);
   if(alvo) alvo.comprovante=null;
   renderHoje(estado.hoje);
+  if(qs('#relatorio-view').classList.contains('active')) await renderRelatorio();
 }
 
 // Abre comprovante em nova aba
@@ -287,9 +293,11 @@ async function renderRelatorio(){
           t.dataset.id=slot.id;
           t.dataset.time=slot.time;
           const btnView=frag.querySelector('[data-action="view-proof"]');
+          const btnAttach=frag.querySelector('[data-action="attach-proof"]');
           const btnRemove=frag.querySelector('[data-action="remove-proof"]');
           if(slot.comprovante){
             btnView.dataset.url=slot.comprovante;
+            btnAttach.classList.add('hidden');
           }else{
             btnView.classList.add('hidden');
             btnRemove.classList.add('hidden');
@@ -330,8 +338,14 @@ async function salvarEdicaoHora(){
   const time=refs.editModalTime.value;
   const id=estado.editando;
   refs.editModal.classList.remove('visible');
-  if(id && time) await editarBatida(id, time);
   estado.editando=null;
+  if(id && time){
+    try{
+      await editarBatida(id, time);
+    }catch(err){
+      console.error(err);
+    }
+  }
 }
 
 // Fecha modal de edição sem salvar
@@ -349,9 +363,14 @@ function mostrarConfirmacao(msg, onConfirm){
 
 // Executa ação confirmada
 async function confirmarAcao(){
-  if(typeof estado.confirmar==='function') await estado.confirmar();
-  estado.confirmar=null;
-  refs.confirmModal.classList.remove('visible');
+  try{
+    if(typeof estado.confirmar==='function') await estado.confirmar();
+  }catch(err){
+    console.error(err);
+  }finally{
+    estado.confirmar=null;
+    refs.confirmModal.classList.remove('visible');
+  }
 }
 
 // Cancela confirmação
