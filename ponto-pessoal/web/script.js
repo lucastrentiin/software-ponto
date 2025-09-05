@@ -14,13 +14,17 @@ const pad = n => String(n).padStart(2,'0');
 // Gera string ISO local
 const localIsoString = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
 
-// Chamada à API com token JWT
+// Chamada à API com token JWT salvo em memória
 async function api(caminho, {method='GET', headers={}, body=null} = {}){
-  const token = localStorage.getItem('token');
   const h = {...headers};
   if(!(body instanceof FormData)) h['Content-Type']='application/json';
-  if(token) h['Authorization']=`Bearer ${token}`;
+  if(estado.token) h['Authorization'] = `Bearer ${estado.token}`;
   const res = await fetch(caminho,{method, headers:h, body});
+  if(res.status===401 || res.status===403){
+    estado.token = null;
+    exigirLogin();
+    throw new Error('Não autorizado');
+  }
   if(!res.ok) throw new Error(await res.text());
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
@@ -38,6 +42,7 @@ async function uploadArquivo(file){
 
 // Estado global ------------------------------------------------
 const estado = {
+  token: null,
   hoje: [],
   ultimoAgrupamento: {},
   editando: null,
@@ -94,9 +99,9 @@ function aplicarTema(tema){
   localStorage.setItem('theme', tema);
 }
 
-// Solicita login caso não exista token
+// Solicita login caso o usuário não esteja autenticado
 function exigirLogin(){
-  if(!localStorage.getItem('token')){
+  if(!estado.token){
     refs.authDialog.showModal();
     return false;
   }
@@ -106,7 +111,7 @@ function exigirLogin(){
 // Realiza login de usuário
 async function login(email, senha){
   const resp = await api('/api/auth/login',{method:'POST', body:JSON.stringify({email, senha})});
-  localStorage.setItem('token', resp.token);
+  estado.token = resp.token;
   refs.authDialog.close();
   await carregarHoje();
 }
@@ -174,6 +179,7 @@ function renderHoje(lista){
 
 // Atualiza horário de uma batida
 async function editarBatida(id, time){
+  if(!exigirLogin()) return;
   const [h,m]=time.split(':').map(Number);
   const d=new Date(); d.setHours(h,m,0,0);
   const iso=localIsoString(d);
@@ -187,6 +193,7 @@ async function editarBatida(id, time){
 
 // Exclui batida
 async function excluirBatida(id){
+  if(!exigirLogin()) return;
   await api(`/api/batidas/${id}`,{method:'DELETE'});
   estado.hoje=estado.hoje.filter(e=>e.id!=id);
   renderHoje(estado.hoje);
@@ -196,6 +203,7 @@ async function excluirBatida(id){
 
 // Anexa comprovante a batida
 async function anexarComprovante(id, file){
+  if(!exigirLogin()) return;
   const url = await uploadArquivo(file);
   await api(`/api/batidas/${id}`,{method:'PATCH', body:JSON.stringify({comprovante:url})});
   const alvo=estado.hoje.find(e=>e.id==id);
@@ -206,6 +214,7 @@ async function anexarComprovante(id, file){
 
 // Remove comprovante
 async function removerComprovante(id){
+  if(!exigirLogin()) return;
   await api(`/api/batidas/${id}`,{method:'PATCH', body:JSON.stringify({comprovante:null})});
   const alvo=estado.hoje.find(e=>e.id==id);
   if(alvo) alvo.comprovante=null;
